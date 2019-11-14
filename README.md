@@ -1,6 +1,11 @@
 # Backtrader-FIX API
 The goal of this project is to make the Backtrader package work with FIX API.
- 
+
+The project requires python3 and above. 
+
+## Issues with requirements:
+If your installation of simplefix is having issues, please use the pre-built wheel at https://github.com/quickfix/quickfix 
+
 ## References:
 
 #### Backtrader references:
