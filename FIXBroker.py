@@ -16,10 +16,12 @@ import FIXStore
 
 class FIXCommInfo(CommInfoBase):
     def getvaluesize(self, size, price):
-        pass
+        # In real life the margin approaches the price
+        return abs(size) * price
 
     def getoperationcost(self, size, price):
-        pass
+        # Same reasoning as above
+        return abs(size) * price
 
 
 class MetaFIXBroker(BrokerBase.__class__):
@@ -31,14 +33,83 @@ class MetaFIXBroker(BrokerBase.__class__):
 
 
 class FIXBroker(with_metaclass(MetaFIXBroker, BrokerBase)):
+    params = (
+        ('use_positions', True),
+    )
+
     def __init__(self, **kwargs):
-        pass
+        super(FIXBroker, self).__init__()
+
+        self.o = FIXStore.FIXStore(**kwargs)
+
+        self.orders = collections.OrderedDict()  # orders by order id
+        self.notifs = collections.deque()  # holds orders which are notified
+
+        self.opending = collections.defaultdict(list)  # pending transmission
+        self.brackets = dict()  # confirmed brackets
+
+        self.startingcash = self.cash = 0.0
+        self.startingvalue = self.value = 0.0
+        self.positions = collections.defaultdict(Position)
+        
+        # alpaca specific
+        # self.addcommissioninfo(self, AlpacaCommInfo(mult=1.0, stocklike=False))
 
     def start(self):
-        pass
+        super(FIXBroker, self).start()
+        
+        # alpaca specific
+        # self.addcommissioninfo(self, AlpacaCommInfo(mult=1.0, stocklike=False))
+
+        self.o.start(broker=self)
+        self.startingcash = self.cash = self.o.get_cash()
+        self.startingvalue = self.value = self.o.get_value()
+
+        if self.p.use_positions:
+            for p in self.o.get_positions():
+                # print('position for instrument:', p['symbol'])
+                # print('position for instrument:', p.symbol)
+                is_sell = p.side == 'short'
+                size = float(p.qty)
+                if is_sell:
+                    size = -size
+                price = float(p.avg_entry_price)
+                self.positions[p.symbol] = Position(size, price)
 
     def data_started(self, data):
-        pass
+        pos = self.getposition(data)
+
+        if pos.size < 0:
+            order = SellOrder(data=data,
+                              size=pos.size, price=pos.price,
+                              exectype=Order.Market,
+                              simulated=True)
+
+            order.addcomminfo(self.getcommissioninfo(data))
+            order.execute(0, pos.size, pos.price,
+                          0, 0.0, 0.0,
+                          pos.size, 0.0, 0.0,
+                          0.0, 0.0,
+                          pos.size, pos.price)
+
+            order.completed()
+            self.notify(order)
+
+        elif pos.size > 0:
+            order = BuyOrder(data=data,
+                             size=pos.size, price=pos.price,
+                             exectype=Order.Market,
+                             simulated=True)
+
+            order.addcomminfo(self.getcommissioninfo(data))
+            order.execute(0, pos.size, pos.price,
+                          0, 0.0, 0.0,
+                          pos.size, 0.0, 0.0,
+                          0.0, 0.0,
+                          pos.size, pos.price)
+
+            order.completed()
+            self.notify(order)
 
     def stop(self):
         pass
