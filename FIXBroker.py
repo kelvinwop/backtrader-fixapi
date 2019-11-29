@@ -38,7 +38,7 @@ class FIXBroker(with_metaclass(MetaFIXBroker, BrokerBase)):
     )
 
     def __init__(self, **kwargs):
-        super(FIXBroker, self).__init__()
+        super().__init__()
 
         self.o = FIXStore.FIXStore(**kwargs)
 
@@ -56,7 +56,7 @@ class FIXBroker(with_metaclass(MetaFIXBroker, BrokerBase)):
         # self.addcommissioninfo(self, AlpacaCommInfo(mult=1.0, stocklike=False))
 
     def start(self):
-        super(FIXBroker, self).start()
+        super().start()
         
         # alpaca specific
         # self.addcommissioninfo(self, AlpacaCommInfo(mult=1.0, stocklike=False))
@@ -112,19 +112,29 @@ class FIXBroker(with_metaclass(MetaFIXBroker, BrokerBase)):
             self.notify(order)
 
     def stop(self):
-        pass
+        super().stop()
+        self.o.stop()
 
     def getcash(self):
-        pass
+        # This call cannot block if no answer is available from Alpaca
+        self.cash = cash = self.o.get_cash()
+        return cash
 
     def getvalue(self):
-        pass
+        self.value = self.o.get_value()
+        return self.value
 
     def getposition(self, data, clone=True):
-        pass
+        # return self.o.getposition(data._dataname, clone=clone)
+        pos = self.positions[data._dataname]
+        if clone:
+            pos = pos.clone()
+
+        return pos
 
     def orderstatus(self, order):
-        pass
+        o = self.orders[order.ref]
+        return o.status
 
     def buy(self, owner, data,
             size, price=None, plimit=None,
@@ -132,7 +142,15 @@ class FIXBroker(with_metaclass(MetaFIXBroker, BrokerBase)):
             trailamount=None, trailpercent=None,
             parent=None, transmit=True,
             **kwargs):
-        pass
+        order = BuyOrder(owner=owner, data=data,
+                         size=size, price=price, pricelimit=plimit,
+                         exectype=exectype, valid=valid, tradeid=tradeid,
+                         trailamount=trailamount, trailpercent=trailpercent,
+                         parent=parent, transmit=transmit)
+
+        order.addinfo(**kwargs)
+        order.addcomminfo(self.getcommissioninfo(data))
+        return self._transmit(order)
 
     def sell(self, owner, data,
              size, price=None, plimit=None,
@@ -140,18 +158,39 @@ class FIXBroker(with_metaclass(MetaFIXBroker, BrokerBase)):
              trailamount=None, trailpercent=None,
              parent=None, transmit=True,
              **kwargs):
-        pass
+        order = SellOrder(owner=owner, data=data,
+                          size=size, price=price, pricelimit=plimit,
+                          exectype=exectype, valid=valid, tradeid=tradeid,
+                          trailamount=trailamount, trailpercent=trailpercent,
+                          parent=parent, transmit=transmit)
+
+        order.addinfo(**kwargs)
+        order.addcomminfo(self.getcommissioninfo(data))
+        return self._transmit(order)
 
     def cancel(self, order):
-        pass
+        if not self.orders.get(order.ref, False):
+            return
+        if order.status == Order.Cancelled:  # already cancelled
+            return
+
+        return self.o.order_cancel(order)
 
     def notify(self, order):
-        pass
+        self.notifs.append(order.clone())
 
     def get_notification(self):
-        pass
+        if not self.notifs:
+            return None
+
+        return self.notifs.popleft()
+
 
     def next(self):
-        pass
+        self.notifs.append(None)  # mark notification boundary
 
+
+    # TODO: send transaction information via FIX
+    def _transmit():
+        pass
     
