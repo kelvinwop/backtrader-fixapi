@@ -191,6 +191,6 @@ class FIXBroker(with_metaclass(MetaFIXBroker, BrokerBase)):
 
 
     # TODO: send transaction information via FIX
-    def _transmit(self, order):
+    def _transmit():
         pass
-
+    
